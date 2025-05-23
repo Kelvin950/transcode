@@ -15,15 +15,21 @@ func main() {
 	outputDir := "outpush_dash"
 	output := "output.m3u8"
 
-	cfg, err := config.LoadDefaultConfig(context.TODO())
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	key := os.Getenv("key")
 	bucket := os.Getenv("bucket")
 	path := os.Getenv("path")
+	taskid := os.Getenv("taskid")
+	timeStarted := os.Getenv("timestarted")
+
+	tableName := "Task_State"
+
+	startTime, _ := time.Parse(time.RFC1123, timeStarted)
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+
+	dynamoCl := NewDynamoClient(cfg, tableName)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println(key, bucket)
 	s3c := NewS3Client(cfg)
@@ -34,6 +40,15 @@ func main() {
 		"Downloaded file from S3:", key,
 	)
 	if err != nil {
+
+		dynamoCl.PutITem(Ec2TaskState{
+			TaskID: taskid,
+
+			State:      "failed",
+			StartedAt:  startTime,
+			FinishedAt: time.Now(),
+			ErrMsg:     err.Error(),
+		})
 		fmt.Println("Error running ffmpeg:", err)
 		log.Fatal(err)
 	}
@@ -50,6 +65,16 @@ func main() {
 	err = job.Run()
 
 	if err != nil {
+		dynamoCl.PutITem(Ec2TaskState{
+			TaskID: taskid,
+
+			State:      "failed",
+			StartedAt:  startTime,
+			FinishedAt: time.Now(),
+			ErrMsg:     err.Error(),
+		})
+	}
+	if err != nil {
 		fmt.Println("Error running ffmpeg:", err)
 		log.Fatal(err, 3)
 	}
@@ -57,6 +82,26 @@ func main() {
 	err = s3c.UploadContents("streamtestke", fmt.Sprintf("%d", time.Now().UnixMicro()))
 
 	if err != nil {
+		dynamoCl.PutITem(Ec2TaskState{
+			TaskID: taskid,
+
+			State:      "failed",
+			StartedAt:  startTime,
+			FinishedAt: time.Now(),
+			ErrMsg:     err.Error(),
+		})
 		log.Fatal(err)
 	}
+	err = dynamoCl.PutITem(Ec2TaskState{
+		TaskID: taskid,
+
+		StartedAt:  startTime,
+		State:      "finished",
+		FinishedAt: time.Now(),
+	})
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
 }
