@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+
 	"os"
+
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,20 +21,25 @@ func main() {
 	bucket := os.Getenv("bucket")
 	path := os.Getenv("path")
 	taskid := os.Getenv("taskid")
-	timeStarted := os.Getenv("timestarted")
+	startTime := os.Getenv("timestarted")
 
 	tableName := "Task_State"
 
-	startTime, _ := time.Parse(time.RFC1123, timeStarted)
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 
 	dynamoCl := NewDynamoClient(cfg, tableName)
 	if err != nil {
+
 		log.Fatal(err)
 	}
 
 	fmt.Println(key, bucket)
 	s3c := NewS3Client(cfg)
+
+	if err != nil {
+		log.Fatal(err)
+
+	}
 
 	err = s3c.DownloadContents(bucket, key)
 
@@ -65,6 +72,7 @@ func main() {
 	err = job.Run()
 
 	if err != nil {
+
 		dynamoCl.PutITem(Ec2TaskState{
 			TaskID: taskid,
 
@@ -73,15 +81,15 @@ func main() {
 			FinishedAt: time.Now(),
 			ErrMsg:     err.Error(),
 		})
-	}
-	if err != nil {
+
 		fmt.Println("Error running ffmpeg:", err)
 		log.Fatal(err, 3)
 	}
 
-	err = s3c.UploadContents("streamtestke", fmt.Sprintf("%d", time.Now().UnixMicro()))
+	err = s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
 
 	if err != nil {
+
 		dynamoCl.PutITem(Ec2TaskState{
 			TaskID: taskid,
 
@@ -92,7 +100,7 @@ func main() {
 		})
 		log.Fatal(err)
 	}
-	err = dynamoCl.PutITem(Ec2TaskState{
+	_, err = dynamoCl.PutITem(Ec2TaskState{
 		TaskID: taskid,
 
 		StartedAt:  startTime,
@@ -101,7 +109,7 @@ func main() {
 	})
 
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 
 }

@@ -16,7 +16,7 @@ type DynamoClient struct {
 
 type Ec2TaskState struct {
 	State      string    `dynamodbav:"state"`
-	StartedAt  time.Time `dynamodbav:"started_at"`
+	StartedAt  string    `dynamodbav:"started_at"`
 	FinishedAt time.Time `dynamodbav:"finished_at"`
 	ErrMsg     string    `dynamodbav:"err_msg"`
 	TaskID     string    `dynamodbav:"task_id"`
@@ -33,15 +33,15 @@ func NewDynamoClient(cfg aws.Config, tablename string) *DynamoClient {
 	}
 }
 
-func (d *DynamoClient) PutITem(item Ec2TaskState) error {
+func (d *DynamoClient) PutITem(item Ec2TaskState) (*dynamodb.PutItemOutput, error) {
 	av, err := attributevalue.MarshalMap(item)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = d.Client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	putOutput, err := d.Client.PutItem(context.Background(), &dynamodb.PutItemInput{
 		TableName: aws.String(d.Table), Item: av,
 	})
-	return err
+	return putOutput, err
 }
