@@ -1,61 +1,116 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type TranscodeJob struct {
 	ffmpegPath string
 	input      string
 	output     string
-	outputDir  string
 }
 
 func (t TranscodeJob) Run() error {
-	cmdString := fmt.Sprintf(`%s -i %s \
--filter_complex "[0:v]split=4[v1][v2][v3][v4]; \
-[v1]scale=w=1920:h=1080[v1out]; \
-[v2]scale=w=1280:h=720[v2out]; \
-[v3]scale=w=1280:h=720[v3out_30fps]; \
-[v3out_30fps]fps=fps=30[v3scaled_30fps]; \
-[v4]scale=w=854:h=480[v4out]; \
-[0:a]asplit=4[a1][a2][a3][a4]" \
--map "[v1out]" -c:v:0 libx264 -s:v:0 1920x1080 -r:v:0 60 -b:v:0 6500k -preset veryfast \
--map "[v2out]" -c:v:1 libx264 -s:v:1 1280x720 -r:v:1 60 -b:v:1 4000k -preset veryfast \
--map "[v3scaled_30fps]" -c:v:2 libx264 -s:v:2 1280x720 -r:v:2 30 -b:v:2 2500k -preset veryfast \
--map "[v4out]" -c:v:3 libx264 -s:v:3 854x480 -r:v:3 30 -b:v:3 1500k -preset veryfast \
--map "[a1]" -c:a:0 aac -b:a:0 128k -ac:a:0 2 \
--map "[a2]" -c:a:1 aac -b:a:1 128k -ac:a:1 2 \
--map "[a3]" -c:a:2 aac -b:a:2 64k  -ac:a:2 2 \
--map "[a4]" -c:a:3 aac -b:a:3 64k  -ac:a:3 2 \
--f hls \
--hls_time 5 \
--hls_playlist_type vod \
--hls_flags independent_segments \
--hls_segment_type mpegts \
--hls_segment_filename "stream_%%v/data%%03d.ts" \
--master_pl_name master.m3u8 \
--var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3" \
-"stream_%%v/playlist.m3u8"`,
-		t.ffmpegPath, t.input)
+	ctx := context.Background()
+	g, ctx := errgroup.WithContext(ctx)
 
-	fmt.Println(cmdString)
-	// Split the command string into arguments.
+	// Define the 4 output configs
+	profiles := []struct {
+		name      string
+		res       string
+		bitrate   string
+		framerate string
+		audioBr   string
+	}{
+		{"1080p", "1920x1080", "6500k", "60", "128k"},
+		{"720p60", "1280x720", "4000k", "60", "128k"},
+		{"720p30", "1280x720", "2500k", "30", "64k"},
+		{"480p", "854x480", "1500k", "30", "64k"},
+	}
 
-	// Create the command.
-	cmd := exec.Command("sh", "-c", cmdString)
+	var mu sync.Mutex
+	var paths []string
 
-	// Optional: Pipe ffmpeg output to stdout/stderr
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	for _, p := range profiles {
+		profile := p // capture loop variable
+		g.Go(func() error {
+			outputDir := filepath.Join(".", "stream_"+profile.name)
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				return err
+			}
 
-	// Run the command
-	if err := cmd.Run(); err != nil {
+			cmd := exec.CommandContext(ctx, t.ffmpegPath,
+				"-i", t.input,
+				"-c:v", "libx264",
+				"-s", profile.res,
+				"-r", profile.framerate,
+				"-b:v", profile.bitrate,
+				"-preset", "ultrafast",
+				"-c:a", "aac",
+				"-b:a", profile.audioBr,
+				"-ac", "2",
+				"-f", "hls",
+				"-hls_time", "5",
+				"-hls_playlist_type", "vod",
+				"-hls_flags", "independent_segments",
+				"-hls_segment_type", "mpegts",
+				"-hls_segment_filename", filepath.Join(outputDir, "data%03d.ts"),
+				filepath.Join(outputDir, "playlist.m3u8"),
+			)
 
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			fmt.Printf("Starting FFmpeg for %s\n", profile.name)
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("ffmpeg failed for %s: %w", profile.name, err)
+			}
+
+			mu.Lock()
+			paths = append(paths, profile.name)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	// Wait for all jobs
+	if err := g.Wait(); err != nil {
 		return err
 	}
 
+	// Generate master.m3u8
+	if err := generateMasterPlaylist("."); err != nil {
+		return fmt.Errorf("failed to generate master playlist: %w", err)
+	}
+
+	fmt.Println("All transcodes complete.")
 	return nil
+}
+
+func generateMasterPlaylist(outputDir string) error {
+	content := `#EXTM3U
+#EXT-X-VERSION:3
+
+#EXT-X-STREAM-INF:BANDWIDTH=6800000,RESOLUTION=1920x1080,FRAME-RATE=60
+stream_1080p/playlist.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=4300000,RESOLUTION=1280x720,FRAME-RATE=60
+stream_720p60/playlist.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=2700000,RESOLUTION=1280x720,FRAME-RATE=30
+stream_720p30/playlist.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=1700000,RESOLUTION=854x480,FRAME-RATE=30
+stream_480p/playlist.m3u8
+`
+	masterPath := filepath.Join(outputDir, "master.m3u8")
+	return os.WriteFile(masterPath, []byte(content), 0644)
 }

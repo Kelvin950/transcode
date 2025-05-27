@@ -14,7 +14,7 @@ import (
 
 func main() {
 
-	outputDir := "outpush_dash"
+	// outputDir := "outpush_dash"
 	output := "output.m3u8"
 
 	key := os.Getenv("key")
@@ -65,7 +65,6 @@ func main() {
 		ffmpegPath: path,
 		input:      key,
 		output:     output,
-		outputDir:  outputDir,
 	}
 
 	fmt.Println("Transcoding job created:", job)
