@@ -30,7 +30,7 @@ WORKDIR /app
 
 COPY --from=ffmpeg   / /
 
-COPY --from=shaka / /
+  COPY --from=shaka /usr/bin/packager /usr/local/bin/packager
 
 # ✅ Copy your Go binary
 
