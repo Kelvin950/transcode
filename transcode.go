@@ -29,10 +29,10 @@ func (t TranscodeJob) Run() error {
 		framerate string
 		audioBr   string
 	}{
-		{"1080p", "1920x1080", "6500k", "60", "128k"},
-		{"720p60", "1280x720", "4000k", "60", "128k"},
-		{"720p30", "1280x720", "2500k", "30", "64k"},
-		{"480p", "854x480", "1500k", "30", "64k"},
+		{"1080p", "1920:1080", "6500k", "60", "128k"},
+		{"720p60", "1280:720", "4000k", "60", "128k"},
+		{"720p30", "1280:720", "2500k", "30", "64k"},
+		{"480p", "854:480", "1500k", "30", "64k"},
 	}
 
 	var mu sync.Mutex
@@ -47,12 +47,16 @@ func (t TranscodeJob) Run() error {
 			}
 
 			cmd := exec.CommandContext(ctx, t.ffmpegPath,
+				"-hwaccel", "cuvid",
+				"-hwaccel_output_format", "cuda",
+				"-sn",
 				"-i", t.input,
-				"-c:v", "libx264",
-				"-s", profile.res,
+				"-vf", fmt.Sprintf("scale_npp=%s:interp_algo=super,hwdownload,format=nv12", profile.res),
+				"-c:v", "h264_nvenc",
+				"-preset", " p1",
+				"-profile:v", "baseline",
 				"-r", profile.framerate,
 				"-b:v", profile.bitrate,
-				"-preset", "ultrafast",
 				"-c:a", "aac",
 				"-b:a", profile.audioBr,
 				"-ac", "2",
