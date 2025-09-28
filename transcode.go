@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"sync"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -15,58 +14,53 @@ type TranscodeJob struct {
 	ffmpegPath string
 	input      string
 	output     string
+	packager   string
 }
 
 func (t TranscodeJob) Run() error {
 	ctx := context.Background()
 	g, ctx := errgroup.WithContext(ctx)
 
-	// Define the 4 output configs
+	// Define the 3 output configs
 	profiles := []struct {
-		name      string
-		res       string
-		bitrate   string
-		framerate string
-		audioBr   string
+		name    string
+		height  string
+		profile string
+		level   string
+		bitrate string
+		minrate string
+		maxrate string
+		bufsize string
 	}{
-		{"1080p", "1920:1080", "6500k", "60", "128k"},
-		{"720p60", "1280:720", "4000k", "60", "128k"},
-		{"720p30", "1280:720", "2500k", "30", "64k"},
-		{"480p", "854:480", "1500k", "30", "64k"},
+		{"480p", "480", "main", "3.1", "1000k", "1000k", "1000k", "1000k"},
+		{"720p", "720", "main", "4.0", "3000k", "3000k", "3000k", "3000k"},
+		{"1080p", "1080", "high", "4.2", "6000k", "6000k", "6000k", "6000k"},
 	}
 
-	var mu sync.Mutex
-	var paths []string
+	var paths = make([]string, len(profiles))
 
-	for _, p := range profiles {
-		profile := p // capture loop variable
+	for i, profile := range profiles {
+		// capture loop variables
+		i, profile := i, profile
 		g.Go(func() error {
-			outputDir := filepath.Join(".", "stream_"+profile.name)
-			if err := os.MkdirAll(outputDir, 0755); err != nil {
-				return err
-			}
+			outputFile := fmt.Sprintf("h264_%s_%s_%s.mp4", profile.profile, profile.name, profile.bitrate)
 
 			cmd := exec.CommandContext(ctx, t.ffmpegPath,
 				"-hwaccel", "cuvid",
 				"-hwaccel_output_format", "cuda",
 				"-sn",
 				"-i", t.input,
-				"-vf", fmt.Sprintf("scale_npp=%s:interp_algo=super,hwdownload,format=nv12", profile.res),
+				"-c:a", "copy",
+				"-vf", fmt.Sprintf("scale_npp=-2:%s,hwdownload,format=nv12", profile.height),
 				"-c:v", "h264_nvenc",
-				"-preset", " p1",
-				"-profile:v", "baseline",
-				"-r", profile.framerate,
+				"-profile:v", profile.profile,
+				"-level:v", profile.level,
+				"-x264-params", "scenecut=0:open_gop=0:min-keyint=72:keyint=72",
+				"-minrate", profile.minrate,
+				"-maxrate", profile.maxrate,
+				"-bufsize", profile.bufsize,
 				"-b:v", profile.bitrate,
-				"-c:a", "aac",
-				"-b:a", profile.audioBr,
-				"-ac", "2",
-				"-f", "hls",
-				"-hls_time", "5",
-				"-hls_playlist_type", "vod",
-				"-hls_flags", "independent_segments",
-				"-hls_segment_type", "mpegts",
-				"-hls_segment_filename", filepath.Join(outputDir, "data%03d.ts"),
-				filepath.Join(outputDir, "playlist.m3u8"),
+				"-y", outputFile,
 			)
 
 			cmd.Stdout = os.Stdout
@@ -77,10 +71,7 @@ func (t TranscodeJob) Run() error {
 				return fmt.Errorf("ffmpeg failed for %s: %w", profile.name, err)
 			}
 
-			mu.Lock()
-			paths = append(paths, profile.name)
-			mu.Unlock()
-
+			paths[i] = outputFile
 			return nil
 		})
 	}
@@ -90,31 +81,63 @@ func (t TranscodeJob) Run() error {
 		return err
 	}
 
-	// Generate master.m3u8
-	if err := generateMasterPlaylist("."); err != nil {
-		return fmt.Errorf("failed to generate master playlist: %w", err)
+	// Now build Shaka Packager command using actual generated files
+	// Your actual files will be:
+	// - h264_main_480p_1000k.mp4
+	// - h264_main_720p_3000k.mp4
+	// - h264_high_1080p_6000k.mp4
+
+	var shakaInputs []string
+
+	// Audio from highest quality file (1080p)
+	var audioSource string
+	for i, profile := range profiles {
+		if profile.name == "1080p" {
+			audioSource = paths[i]
+			break
+		}
 	}
 
+	// Add audio input
+	shakaInputs = append(shakaInputs, fmt.Sprintf(
+		"'in=%s,stream=audio,init_segment=audio/init.mp4,segment_template=audio/$Number$.m4s,playlist_name=audio.m3u8,hls_group_id=audio,hls_name=ENGLISH'",
+		audioSource))
+
+	// Add video inputs for each profile
+	for i, profile := range profiles {
+		outputFile := paths[i]
+
+		// Basic video stream
+		var videoInput string
+		if profile.name == "720p" || profile.name == "1080p" {
+			// Add iframe playlist for higher qualities
+			videoInput = fmt.Sprintf(
+				"'in=%s,stream=video,init_segment=h264_%s/init.mp4,segment_template=h264_%s/$Number$.m4s,playlist_name=h264_%s.m3u8,iframe_playlist_name=h264_%s_iframe.m3u8'",
+				outputFile, profile.name, profile.name, profile.name, profile.name)
+		} else {
+			videoInput = fmt.Sprintf(
+				"'in=%s,stream=video,init_segment=h264_%s/init.mp4,segment_template=h264_%s/$Number$.m4s,playlist_name=h264_%s.m3u8'",
+				outputFile, profile.name, profile.name, profile.name)
+		}
+
+		shakaInputs = append(shakaInputs, videoInput)
+
+		// Add trick-play tracks for 720p and 1080p
+		if profile.name == "720p" || profile.name == "1080p" {
+			trickPlayInput := fmt.Sprintf(
+				"'in=%s,stream=video,init_segment=h264_%s_trick/init.mp4,segment_template=h264_%s_trick/$Number$.m4s,trick_play_factor=1'",
+				outputFile, profile.name, profile.name)
+			shakaInputs = append(shakaInputs, trickPlayInput)
+		}
+	}
+
+	// Build final command
+	cmdstr := fmt.Sprintf("%s %s --generate_static_live_mpd --mpd_output h264.mpd --hls_master_playlist_output h264_master.m3u8",
+		t.packager,
+		strings.Join(shakaInputs, " \\\n  "))
+
+	fmt.Printf("Shaka Packager command:\n%s\n", cmdstr)
 	fmt.Println("All transcodes complete.")
+	fmt.Printf("Generated MP4 files: %v\n", paths)
 	return nil
-}
-
-func generateMasterPlaylist(outputDir string) error {
-	content := `#EXTM3U
-#EXT-X-VERSION:3
-
-#EXT-X-STREAM-INF:BANDWIDTH=6800000,RESOLUTION=1920x1080,FRAME-RATE=60
-stream_1080p/playlist.m3u8
-
-#EXT-X-STREAM-INF:BANDWIDTH=4300000,RESOLUTION=1280x720,FRAME-RATE=60
-stream_720p60/playlist.m3u8
-
-#EXT-X-STREAM-INF:BANDWIDTH=2700000,RESOLUTION=1280x720,FRAME-RATE=30
-stream_720p30/playlist.m3u8
-
-#EXT-X-STREAM-INF:BANDWIDTH=1700000,RESOLUTION=854x480,FRAME-RATE=30
-stream_480p/playlist.m3u8
-`
-	masterPath := filepath.Join(outputDir, "master.m3u8")
-	return os.WriteFile(masterPath, []byte(content), 0644)
 }

@@ -13,14 +13,7 @@ RUN go build -o main .
 FROM jrottenberg/ffmpeg:7.1-nvidia2204 AS ffmpeg 
 
 
-
-
-
-
-
-
-
-
+FROM google/shaka-packager AS shaka
 
 
 
@@ -37,6 +30,7 @@ WORKDIR /app
 
 COPY --from=ffmpeg   / /
 
+COPY --from=shaka / /
 
 # ✅ Copy your Go binary
 
