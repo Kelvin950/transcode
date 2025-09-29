@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
@@ -22,6 +23,12 @@ func (t TranscodeJob) Run() error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	// Define the 3 output configs
+	// Create output directory
+	outputDir := "encoded_output"
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
 	profiles := []struct {
 		name    string
 		height  string
@@ -43,7 +50,7 @@ func (t TranscodeJob) Run() error {
 		// capture loop variables
 		i, profile := i, profile
 		g.Go(func() error {
-			outputFile := fmt.Sprintf("h264_%s_%s_%s.mp4", profile.profile, profile.name, profile.bitrate)
+			outputFile := filepath.Join(outputDir, fmt.Sprintf("h264_%s_%s_%s.mp4", profile.profile, profile.name, profile.bitrate))
 
 			cmd := exec.CommandContext(ctx, t.ffmpegPath,
 				"-hwaccel", "cuvid",
@@ -81,12 +88,7 @@ func (t TranscodeJob) Run() error {
 		return err
 	}
 
-	// Now build Shaka Packager command using actual generated files
-	// Your actual files will be:
-	// - h264_main_480p_1000k.mp4
-	// - h264_main_720p_3000k.mp4
-	// - h264_high_1080p_6000k.mp4
-
+	// Build Shaka Packager command with output directory
 	var shakaInputs []string
 
 	// Audio from highest quality file (1080p)
@@ -98,26 +100,26 @@ func (t TranscodeJob) Run() error {
 		}
 	}
 
-	// Add audio input
+	// Add audio input - segments also go to outputDir
 	shakaInputs = append(shakaInputs, fmt.Sprintf(
-		"'in=%s,stream=audio,init_segment=audio/init.mp4,segment_template=audio/$Number$.m4s,playlist_name=audio.m3u8,hls_group_id=audio,hls_name=ENGLISH'",
-		audioSource))
+		"'in=%s,stream=audio,init_segment=%s/audio/init.mp4,segment_template=%s/audio/$Number$.m4s,playlist_name=audio.m3u8,hls_group_id=audio,hls_name=ENGLISH'",
+		audioSource, outputDir, outputDir))
 
 	// Add video inputs for each profile
 	for i, profile := range profiles {
 		outputFile := paths[i]
 
-		// Basic video stream
+		// Basic video stream - segments go to outputDir
 		var videoInput string
 		if profile.name == "720p" || profile.name == "1080p" {
 			// Add iframe playlist for higher qualities
 			videoInput = fmt.Sprintf(
-				"'in=%s,stream=video,init_segment=h264_%s/init.mp4,segment_template=h264_%s/$Number$.m4s,playlist_name=h264_%s.m3u8,iframe_playlist_name=h264_%s_iframe.m3u8'",
-				outputFile, profile.name, profile.name, profile.name, profile.name)
+				"'in=%s,stream=video,init_segment=%s/h264_%s/init.mp4,segment_template=%s/h264_%s/$Number$.m4s,playlist_name=h264_%s.m3u8,iframe_playlist_name=h264_%s_iframe.m3u8'",
+				outputFile, outputDir, profile.name, outputDir, profile.name, profile.name, profile.name)
 		} else {
 			videoInput = fmt.Sprintf(
-				"'in=%s,stream=video,init_segment=h264_%s/init.mp4,segment_template=h264_%s/$Number$.m4s,playlist_name=h264_%s.m3u8'",
-				outputFile, profile.name, profile.name, profile.name)
+				"'in=%s,stream=video,init_segment=%s/h264_%s/init.mp4,segment_template=%s/h264_%s/$Number$.m4s,playlist_name=h264_%s.m3u8'",
+				outputFile, outputDir, profile.name, outputDir, profile.name, profile.name)
 		}
 
 		shakaInputs = append(shakaInputs, videoInput)
@@ -125,16 +127,20 @@ func (t TranscodeJob) Run() error {
 		// Add trick-play tracks for 720p and 1080p
 		if profile.name == "720p" || profile.name == "1080p" {
 			trickPlayInput := fmt.Sprintf(
-				"'in=%s,stream=video,init_segment=h264_%s_trick/init.mp4,segment_template=h264_%s_trick/$Number$.m4s,trick_play_factor=1'",
-				outputFile, profile.name, profile.name)
+				"'in=%s,stream=video,init_segment=%s/h264_%s_trick/init.mp4,segment_template=%s/h264_%s_trick/$Number$.m4s,trick_play_factor=1'",
+				outputFile, outputDir, profile.name, outputDir, profile.name)
 			shakaInputs = append(shakaInputs, trickPlayInput)
 		}
 	}
 
-	// Build final command
-	cmdstr := fmt.Sprintf("%s %s --generate_static_live_mpd --mpd_output h264.mpd --hls_master_playlist_output h264_master.m3u8",
+	// Build final command - manifests also go to outputDir
+	cmdstr := fmt.Sprintf("%s %s --generate_static_live_mpd --mpd_output %s/h264.mpd --hls_master_playlist_output %s/h264_master.m3u8",
 		t.packager,
-		strings.Join(shakaInputs, " \\\n  "))
+		strings.Join(shakaInputs, " \\\n  "),
+		outputDir,
+		outputDir)
+
+	fmt.Printf("Shaka Packager command:\n%s\n", cmdstr)
 
 	fmt.Printf("Shaka Packager command:\n%s\n", cmdstr)
 	fmt.Println("All transcodes complete.")

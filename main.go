@@ -90,7 +90,7 @@ func main() {
 	if err!=nil{
 		log.Fatal(err)
 	}
-	/*
+	
 	err = s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
 
 	if err != nil {
@@ -117,6 +117,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	*/
+	
 
 }
