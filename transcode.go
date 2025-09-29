@@ -142,7 +142,14 @@ func (t TranscodeJob) Run() error {
 
 	fmt.Printf("Shaka Packager command:\n%s\n", cmdstr)
 
-	fmt.Printf("Shaka Packager command:\n%s\n", cmdstr)
+	  cmd := exec.Command("sh" ,"-c" , cmdstr) 
+	
+	  cmd.Stderr = os.Stderr
+	  cmd.Stdin = os.Stdin 
+
+	  if err:= cmd.Run() ; err!=nil{
+		return err
+	  }
 	fmt.Println("All transcodes complete.")
 	fmt.Printf("Generated MP4 files: %v\n", paths)
 	return nil
