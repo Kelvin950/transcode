@@ -56,7 +56,7 @@ func (s S3Client) DownloadContents(bucket, key string) error {
 func (s S3Client) UploadContents(bucket, key string) error {
 
 	queue := []string{
-		".",
+		"./encoded_output",
 	}
 
 	s3files := []string{}
@@ -83,10 +83,10 @@ func (s S3Client) UploadContents(bucket, key string) error {
 					continue
 				}
 
-				if filepath.Ext(dirOrFile.Name()) == ".ts" || filepath.Ext(dirOrFile.Name()) == ".m3u8" {
+		
 					s3files = append(s3files, filepath.Join(dirc, dirOrFile.Name()))
 
-				}
+				
 			}
 
 		}

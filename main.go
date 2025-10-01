@@ -14,7 +14,7 @@ import (
 
 func main() {
 
-	outputDir := "outpush_dash"
+	// outputDir := "outpush_dash"
 	output := "output.m3u8"
 
 	key := os.Getenv("key")
@@ -22,6 +22,7 @@ func main() {
 	path := os.Getenv("path")
 	taskid := os.Getenv("taskid")
 	startTime := os.Getenv("timestarted")
+	packagerpath := os.Getenv("path1")
 
 	tableName := "Task_State"
 
@@ -65,7 +66,7 @@ func main() {
 		ffmpegPath: path,
 		input:      key,
 		output:     output,
-		outputDir:  outputDir,
+		packager: packagerpath,
 	}
 
 	fmt.Println("Transcoding job created:", job)
@@ -86,6 +87,10 @@ func main() {
 		log.Fatal(err, 3)
 	}
 
+	if err!=nil{
+		log.Fatal(err)
+	}
+	
 	err = s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
 
 	if err != nil {
@@ -111,5 +116,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	
 
 }
