@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -9,8 +10,13 @@ import (
 
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/config"
+	Sqssubpub "github.com/kelvin950/sqspubsub"
 )
+
+var logger = watermill.NewStdLogger(false, false)
 
 func main() {
 
@@ -28,19 +34,24 @@ func main() {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 
-	dynamoCl := NewDynamoClient(cfg, tableName)
 	if err != nil {
 
 		log.Fatal(err)
 	}
 
+	pub, err := Sqssubpub.NewSqsSub(&cfg, logger)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = pub.CreatePub()
+
+	if err != nil {
+		log.Fatal(err)
+	}
 	fmt.Println(key, bucket)
 	s3c := NewS3Client(cfg)
-
-	if err != nil {
-		log.Fatal(err)
-
-	}
 
 	err = s3c.DownloadContents(bucket, key)
 
@@ -49,14 +60,28 @@ func main() {
 	)
 	if err != nil {
 
-		dynamoCl.PutITem(Ec2TaskState{
-			TaskID: taskid,
+		// dynamoCl.PutITem(Ec2TaskState{
+		// 	TaskID: taskid,
 
-			State:      "failed",
-			StartedAt:  startTime,
-			FinishedAt: time.Now(),
-			ErrMsg:     err.Error(),
-		})
+		// 	State:      "failed",
+		// 	StartedAt:  startTime,
+		// 	FinishedAt: time.Now(),
+		// 	ErrMsg:     err.Error(),
+
+		x := map[string]interface{}{
+			"taskid": taskid,
+
+			"state":      "failed",
+			"startedAt":  startTime,
+			"finishedAt": time.Now(),
+			"contentid":  79,
+			"errmsg":     err.Error(),
+		}
+
+		p, _ := json.Marshal(&x)
+
+		pub.Publisher.Publish("Transcode_job", message.NewMessage(watermill.NewUUID(), p))
+		// })
 		fmt.Println("Error running ffmpeg:", err)
 		log.Fatal(err)
 	}
@@ -74,14 +99,28 @@ func main() {
 
 	if err != nil {
 
-		dynamoCl.PutITem(Ec2TaskState{
-			TaskID: taskid,
+		// dynamoCl.PutITem(Ec2TaskState{
+		// 	TaskID: taskid,
 
-			State:      "failed",
-			StartedAt:  startTime,
-			FinishedAt: time.Now(),
-			ErrMsg:     err.Error(),
-		})
+		// 	State:      "failed",
+		// 	StartedAt:  startTime,
+		// 	FinishedAt: time.Now(),
+		// 	ErrMsg:     err.Error(),
+		// })
+
+		x := map[string]interface{}{
+			"taskid": taskid,
+
+			"state":      "failed",
+			"startedAt":  startTime,
+			"finishedAt": time.Now(),
+			"contentid":  79,
+			"errmsg":     err.Error(),
+		}
+
+		p, _ := json.Marshal(&x)
+
+		pub.Publisher.Publish("Transcode_job", message.NewMessage(watermill.NewUUID(), p))
 
 		fmt.Println("Error running ffmpeg:", err)
 		log.Fatal(err, 3)
@@ -95,23 +134,44 @@ func main() {
 
 	if err != nil {
 
-		dynamoCl.PutITem(Ec2TaskState{
-			TaskID: taskid,
+		// dynamoCl.PutITem(Ec2TaskState{
+		// 	TaskID: taskid,
 
-			State:      "failed",
-			StartedAt:  startTime,
-			FinishedAt: time.Now(),
-			ErrMsg:     err.Error(),
-		})
+		// 	State:      "failed",
+		// 	StartedAt:  startTime,
+		// 	FinishedAt: time.Now(),
+		// 	ErrMsg:     err.Error(),
+		// })
+
+		x := map[string]interface{}{
+			"taskid": taskid,
+
+			"state":      "failed",
+			"startedAt":  startTime,
+			"finishedAt": time.Now(),
+			"contentid":  79,
+			"errmsg":     err.Error(),
+		}
+
+		p, _ := json.Marshal(&x)
+
+		pub.Publisher.Publish("Transcode_job", message.NewMessage(watermill.NewUUID(), p))
 		log.Fatal(err)
 	}
-	_, err = dynamoCl.PutITem(Ec2TaskState{
-		TaskID: taskid,
 
-		StartedAt:  startTime,
-		State:      "finished",
-		FinishedAt: time.Now(),
-	})
+	x := map[string]interface{}{
+		"taskid": taskid,
+
+		"state":        "failed",
+		"startedAt":    startTime,
+		"finishedAt":   time.Now(),
+		"contentid":    79,
+		"manifest_url": url,
+	}
+
+	p, _ := json.Marshal(&x)
+
+	pub.Publisher.Publish("Transcode_job", message.NewMessage(watermill.NewUUID(), p))
 
 	if err != nil {
 		log.Fatal(err)
