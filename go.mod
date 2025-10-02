@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.43.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.3
 	github.com/aws/smithy-go v1.23.0
-	github.com/kelvin950/sqspubsub v1.0.4
+	github.com/kelvin950/sqspubsub v1.0.5
 	golang.org/x/sync v0.14.0
 )
 

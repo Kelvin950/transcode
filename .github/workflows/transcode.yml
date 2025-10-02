@@ -3,7 +3,7 @@ name: ci
 on:
   push:
     branches:
-      - transcode2
+      - main
 
 
 jobs:
@@ -32,4 +32,4 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          tags:  ${{secrets.DOCKERHUB_USERNAME}}/transcode:package
+          tags:  ${{secrets.DOCKERHUB_USERNAME}}/transcode:main

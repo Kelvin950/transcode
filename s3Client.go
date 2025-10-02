@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
+	
 
 	"os"
 	"path/filepath"
@@ -54,9 +54,8 @@ func (s S3Client) DownloadContents(bucket, key string) error {
 
 }
 
-func (s S3Client) UploadContents(bucket, key string) (string , error) {
+func (s S3Client) UploadContents(bucket, key string)(string , string ,error) {
 
-	var masterFile string
 	queue := []string{
 		"./encoded_output",
 	}
@@ -75,7 +74,7 @@ func (s S3Client) UploadContents(bucket, key string) (string , error) {
 		dir, err := os.ReadDir(dirc)
 
 		if err != nil {
-			return "" , err
+			return "" ,"",err
 		}
 		for _, dirOrFile := range dir {
 
@@ -119,9 +118,6 @@ func (s S3Client) UploadContents(bucket, key string) (string , error) {
 				})
 
 				fmt.Println(output.Location)
-				if strings.Contains(f , "master.m3u8") {
-					masterFile = output.Location
-				}
 				if err != nil {
 					fmt.Println("Uploading fdildde:", f)
 					return err
@@ -131,5 +127,5 @@ func (s S3Client) UploadContents(bucket, key string) (string , error) {
 		}(file)
 	}
 
-	return masterFile , errG.Wait()
+	return fmt.Sprintf("%s/%s/h264.mpd" ,key ,outputDir  ) ,  fmt.Sprintf("%s/%s/h264_master.m3u8" ,key ,outputDir  ), errG.Wait()
 }

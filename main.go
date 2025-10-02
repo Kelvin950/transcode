@@ -30,7 +30,7 @@ func main() {
 	startTime := os.Getenv("timestarted")
 	packagerpath := os.Getenv("path1")
 
-	tableName := "Task_State"
+	// tableName := "Task_State"
 
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 
@@ -130,7 +130,7 @@ func main() {
 		log.Fatal(err)
 	}
 	
-	err = s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
+	dash, hls ,err := s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
 
 	if err != nil {
 
@@ -166,7 +166,7 @@ func main() {
 		"startedAt":    startTime,
 		"finishedAt":   time.Now(),
 		"contentid":    79,
-		"manifest_url": url,
+		"manifest_url": fmt.Sprintf("%s:%s",dash, hls),
 	}
 
 	p, _ := json.Marshal(&x)

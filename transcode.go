@@ -18,13 +18,14 @@ type TranscodeJob struct {
 	packager   string
 }
 
-func (t TranscodeJob) Run() error {
+var outputDir = "encoded_output"
+func (t TranscodeJob) Run()( error ){
 	ctx := context.Background()
 	g, ctx := errgroup.WithContext(ctx)
 
 	// Define the 3 output configs
 	// Create output directory
-	outputDir := "encoded_output"
+	
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
