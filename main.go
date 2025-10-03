@@ -23,7 +23,7 @@ func main() {
 
 	// outputDir := "outpush_dash"
 	output := "output.m3u8"
-
+	contentId := os.Getenv("content_id")
 	key := os.Getenv("key")
 	bucket := os.Getenv("bucket")
 	path := os.Getenv("path")
@@ -78,7 +78,7 @@ func main() {
 			"state":      "failed",
 			"startedAt":  startTime,
 			"finishedAt": time.Now(),
-			"contentid":  79,
+			"contentid":  contentId,
 			"errmsg":     err.Error(),
 		}
 
@@ -118,7 +118,7 @@ func main() {
 			"state":      "failed",
 			"startedAt":  startTime,
 			"finishedAt": time.Now(),
-			"contentid":  79,
+			"contentid":  contentId,
 			"errmsg":     err.Error(),
 		}
 
@@ -153,7 +153,7 @@ func main() {
 			"state":      "failed",
 			"startedAt":  startTime,
 			"finishedAt": time.Now(),
-			"contentid":  79,
+			"contentid":  contentId,
 			"errmsg":     err.Error(),
 		}
 
@@ -169,7 +169,7 @@ func main() {
 		"state":        "failed",
 		"startedAt":    startTime,
 		"finishedAt":   time.Now(),
-		"contentid":    79,
+		"contentid":    contentId,
 		"manifest_url": fmt.Sprintf("%s:%s", dash, hls),
 	}
 
