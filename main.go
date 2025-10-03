@@ -171,10 +171,10 @@ func main() {
 
 	p, _ := json.Marshal(&x)
 
-	pub.Publisher.Publish("Transcode_job", message.NewMessage(watermill.NewUUID(), p))
+	err = pub.Publisher.Publish("Transcode_job", message.NewMessage(watermill.NewUUID(), p))
 
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err.Error())
 	}
 
 	
