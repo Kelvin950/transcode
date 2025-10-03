@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 
 	"os"
 
@@ -23,7 +24,7 @@ func main() {
 
 	// outputDir := "outpush_dash"
 	output := "output.m3u8"
-	contentId := os.Getenv("content_id")
+	content_id := os.Getenv("content_id")
 	key := os.Getenv("key")
 	bucket := os.Getenv("bucket")
 	path := os.Getenv("path")
@@ -31,6 +32,12 @@ func main() {
 	startTime := os.Getenv("timestarted")
 	packagerpath := os.Getenv("path1")
 
+
+	contentId ,err := strconv.Atoi(content_id)
+	if err != nil {
+
+		log.Fatal(err)
+	}
 	// tableName := "Task_State"
 
 	cfg, err := config.LoadDefaultConfig(context.TODO())
