@@ -13,6 +13,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	Sqssubpub "github.com/kelvin950/sqspubsub"
 )
 
@@ -39,7 +40,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pub, err := Sqssubpub.NewSqsSub(&cfg, logger)
+	pub, err := Sqssubpub.NewSqsSub(&cfg, logger, func(o *sqs.Options) {
+
+		
+	})
 
 	if err != nil {
 		log.Fatal(err)
@@ -91,7 +95,7 @@ func main() {
 		ffmpegPath: path,
 		input:      key,
 		output:     output,
-		packager: packagerpath,
+		packager:   packagerpath,
 	}
 
 	fmt.Println("Transcoding job created:", job)
@@ -126,11 +130,11 @@ func main() {
 		log.Fatal(err, 3)
 	}
 
-	if err!=nil{
+	if err != nil {
 		log.Fatal(err)
 	}
-	
-	dash, hls ,err := s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
+
+	dash, hls, err := s3c.UploadContents("streamtestke", time.Now().Format(time.RFC1123))
 
 	if err != nil {
 
@@ -166,7 +170,7 @@ func main() {
 		"startedAt":    startTime,
 		"finishedAt":   time.Now(),
 		"contentid":    79,
-		"manifest_url": fmt.Sprintf("%s:%s",dash, hls),
+		"manifest_url": fmt.Sprintf("%s:%s", dash, hls),
 	}
 
 	p, _ := json.Marshal(&x)
@@ -176,7 +180,5 @@ func main() {
 	if err != nil {
 		log.Println(err.Error())
 	}
-
-	
 
 }
