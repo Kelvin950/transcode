@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	
+	"path"
 
 	"os"
 	"path/filepath"
@@ -37,7 +37,9 @@ func NewS3Client(cfg aws.Config) *S3Client {
 
 func (s S3Client) DownloadContents(bucket, key string) error {
 
-	fs, err := os.Create(key)
+
+	ext:=path.Ext(key)
+	fs, err := os.Create("video"+ext)
 
 	if err != nil {
 		return err

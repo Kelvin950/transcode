@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"os"
-
+   fp "path/filepath"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -97,10 +97,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	ext:= fp.Ext(key)
 	job := TranscodeJob{
 
 		ffmpegPath: path,
-		input:      key,
+		input:      "video"+ext,
 		output:     output,
 		packager:   packagerpath,
 	}
@@ -173,7 +174,7 @@ func main() {
 	x := map[string]interface{}{
 		"taskid": taskid,
 
-		"state":        "failed",
+		"state":        "success",
 		"startedAt":    startTime,
 		"finishedAt":   time.Now(),
 		"contentid":    contentId,
